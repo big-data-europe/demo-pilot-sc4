@@ -1,0 +1,296 @@
+version: '2.1'
+services:
+    zookeeper:
+        build:
+            context: ./sc4-zookeeper
+        environment:
+            - MYID=1
+            - INIT_DAEMON_STEP=setup_zookeeper
+            - ENABLE_INIT_DAEMON=true
+            - INIT_DAEMON_BASE_URI=http://initdaemon
+        expose:
+            - "2181"
+        ports:
+            - "2181:2181"
+        labels:
+            - "logging=true"
+
+    kafka:
+        build:
+            context: ./sc4-kafka
+        environment:
+            - ZOOKEEPER_SERVERS=zookeeper:2181
+            - INITIAL_TOPICS=taxi
+            - INIT_DAEMON_STEP=setup_kafka
+            - ENABLE_INIT_DAEMON=true
+            - INIT_DAEMON_BASE_URI=http://initdaemon
+        depends_on:
+            - zookeeper
+        ports:
+            - "9092:9092"
+        labels:
+            - "logging=true"
+           
+    namenode:
+      image: bde2020/hadoop-namenode:1.1.0-hadoop2.7.1-java8
+      environment:
+              CSS_SOURCE: "hadoop"
+              CLUSTER_NAME: test
+              INIT_DAEMON_STEP: "setup_hdfs"
+              VIRTUAL_HOST: hdfs-namenode.big-data-europe.local
+      env_file:
+            - ./config/hadoop/hadoop.env
+      volumes:
+            - ./data/hadoop/namenode:/hadoop/dfs/name
+      expose:
+            - "50070"
+      ports:
+            - "8020:8020"
+      labels:
+            - "logging=true"
+
+    datanode:
+        image: bde2020/hadoop-datanode:1.1.0-hadoop2.7.1-java8
+        environment:
+              CSS_SOURCE: "hadoop"
+              VIRTUAL_HOST: hdfs-datanode.big-data-europe.local
+              VIRTUAL_PORT: "50075"
+        env_file:
+            - ./config/hadoop/hadoop.env
+        volumes:
+            - ./data/hadoop/datanode:/hadoop/dfs/data
+        depends_on:
+            - namenode
+        expose:
+            - "50075"
+        labels:
+            - "logging=true"
+
+    resourcemanager:
+        image: bde2020/hadoop-resourcemanager:1.1.0-hadoop2.7.1-java8
+        expose:
+            - "8031"
+            - "8088"
+        environment:
+            VIRTUAL_HOST: hdfs-resourcemanager.demo.big-data-europe.local
+            VIRTUAL_PORT: "8088"
+            CSS_SOURCE: "hadoop-resource-manager"
+        env_file:
+            - ./config/hadoop/hadoop.env
+        ports:
+            - "9991:8088"
+        depends_on:
+              - namenode
+              - datanode
+        labels:
+            - "logging=true"
+
+    historyserver:
+        image: bde2020/hadoop-historyserver:1.1.0-hadoop2.7.1-java8
+        volumes:
+            - ./data/hadoop/historyserver:/hadoop/yarn/timeline
+        env_file:
+            - ./config/hadoop/hadoop.env
+        environment:
+            VIRTUAL_HOST: hdfs-historyserver.demo.big-data-europe.local
+            VIRTUAL_PORT: "8188"
+            CSS_SOURCE: "hadoop-history-server"
+        depends_on:
+              - namenode
+              - datanode
+        ports:
+            - "9992:8188"
+        labels:
+            - "logging=true"
+
+    nodemanager:
+        image: bde2020/hadoop-nodemanager:1.1.0-hadoop2.7.1-java8
+        expose:
+            - "8042"
+        environment:
+            VIRTUAL_HOST: hdfs-nodemanager.demo.big-data-europe.local
+            VIRTUAL_PORT: "8042"
+            CSS_SOURCE: "hadoop-node-manager"
+        env_file:
+            - ./config/hadoop/hadoop.env
+        depends_on:
+              - namenode
+              - datanode
+        ports:
+            - "9993:8042"
+        labels:
+            - "logging=true"
+
+    filebrowser:
+        image: bde2020/hdfs-filebrowser:latest
+        expose:
+            - "8088"
+        environment:
+              NAMENODE_HOST: namenode
+              VIRTUAL_HOST: hue.big-data-europe.local
+              VIRTUAL_PORT: "8088"
+        depends_on:
+            - namenode
+            - datanode
+        ports:
+            - "9994:8088"
+        labels:
+            - "logging=true"
+
+    flink-master:
+        image: flowofcontrol/fm-demo
+        expose:
+              - "8081"
+              - "8080"
+        environment:
+              CSS_SOURCE: "flink-dashboard"
+              INIT_DAEMON_STEP: "setup_flink"
+              VIRTUAL_HOST: flink-master.big-data-europe.local
+              VIRTUAL_PORT: "8081"
+        volumes:
+              - ./data/flink-master:/data
+              - ./config/flink-worker/flink-conf.yml:/usr/local/flink/conf/flink-conf.yml
+              - ./config/flink-worker/slaves:/usr/local/flink/conf/slaves
+        env_file:
+              - ./config/hadoop/hadoop.env
+        depends_on:
+              - namenode
+              - datanode
+        ports:
+            - "9995:8081"
+        labels:
+            - "logging=true"
+
+    flink-worker:
+        image: flowofcontrol/fw-demo
+        links:
+              - flink-master
+        environment:
+              FLINK_MASTER_PORT_6123_TCP_ADDR: flink-master
+              CSS_SOURCE: "flink-dashboard"
+              VIRTUAL_HOST: flink-worker.big-data-europe.local
+              VIRTUAL_PORT: "8080"
+        depends_on:
+              - flink-master
+        volumes:
+              - ./data/flink-master:/data
+              - ./config/flink-worker/flink-conf.yml:/usr/local/flink/conf/flink-conf.yml
+        labels:
+            - "logging=true"
+
+    producer:
+        image: asjongers/sc4-fcd-flink-application:0.0.1
+        environment:
+              HDFS_URL: hdfs://namenode:8020
+              INIT_DAEMON_STEP: floating_producer
+              FLINK_MASTER_PORT_6123_TCP_ADDR: "flink-master"
+              FLINK_MASTER_PORT_6123_TCP_PORT: "6123"
+              FLINK_APPLICATION_JAR_NAME: "pilot-sc4-fcd-applications-0.1-jar-with-dependencies"
+              FLINK_APPLICATION_MAIN_CLASS: "eu.bde.pilot.sc4.fcd.FlinkFcdProducer"
+              FLINK_APPLICATION_ARGS: "--path hdfs://namenode:8020/user/hue/taxi_sample_100k.txt --topic taxi"
+        env_file:
+              - ./config/hadoop/hadoop.env
+        labels:
+            - "logging=true"
+
+    consumer:
+        image: asjongers/sc4-fcd-flink-application:0.0.1
+        environment:
+              HDFS_URL: hdfs://namenode:8020
+              INIT_DAEMON_STEP: floating_consumer
+              FLINK_MASTER_PORT_6123_TCP_ADDR: "flink-master"
+              FLINK_MASTER_PORT_6123_TCP_PORT: "6123"
+              FLINK_APPLICATION_JAR_NAME: "pilot-sc4-fcd-applications-0.1-jar-with-dependencies"
+              FLINK_APPLICATION_MAIN_CLASS: "eu.bde.pilot.sc4.fcd.FlinkFcdConsumer"
+              FLINK_APPLICATION_ARGS: "--topic taxi --window 2 --sink hdfs://namenode:8020/user/hue/taxi_aggregates.txt --elasticsearch_endpoint elasticsearch --elasticsearch_port 9300"
+        env_file:
+              - ./config/hadoop/hadoop.env
+        labels:
+            - "logging=true"
+
+    monitor:
+        image: bde2020/pipeline-monitor-frontend:0.1.0
+        links:
+            - identifier:backend
+        depends_on:
+            - identifier
+        environment:
+              VIRTUAL_HOST: monitor.big-data-europe.local
+        ports:
+            - "9996:80"
+        labels:
+            - "logging=true"
+
+    identifier:
+        image: semtech/mu-identifier:1.0.0
+        labels:
+            - "logging=true"
+
+    dispatcher:
+        image: semtech/mu-dispatcher:1.0.1
+        volumes:
+            - ./config:/config
+        labels:
+            - "logging=true"
+
+    database:
+        image: tenforce/virtuoso:1.0.0-virtuoso7.2.2
+        environment:
+            - SPARQL_UPDATE=true
+            - DEFAULT_GRAPH=http://mu.semte.ch/application
+            - VIRTUAL_HOST=virtuoso.big-data-europe.local
+            - VIRTUAL_PORT=8890
+        volumes:
+            - ./data/database:/data
+        ports:
+            - 9980:8890
+        labels:
+            - "logging=true"
+
+    pipeline:
+        image: bde2020/mu-pipeline-service:0.1.0
+        labels:
+            - "logging=true"
+
+    initdaemon:
+        image: bde2020/mu-init-daemon-service:0.1.0
+
+    integratorui:
+        image: bde2020/integrator-ui:1.8.7
+        volumes:
+            - ./config/integrator:/app/config
+        environment:
+            VIRTUAL_HOST: demo.big-data-europe.local
+        ports:
+            - "9999:80"
+        labels:
+            - "logging=true"
+
+    csswrapper:
+        image: bde2020/nginx-proxy-with-css
+        ports:
+            - 8888:80
+        volumes:
+            - /var/run/docker.sock:/tmp/docker.sock:ro
+        labels:
+            - "logging=true"
+
+    elasticsearch:
+      image: bde2020/sc4-elasticsearch  # check sc4-elasticsearch/Dockerfile
+      build:
+        context: sc4-elasticsearch/
+      ports:
+        - 9201:9200
+        - 9301:9300
+      labels:
+            - "logging=true"
+    kibana:
+      #        image: kibana:6.1.0
+      image: kibana:4.5.0
+      environment:
+        ELASTICSEARCH_URL: http://elasticsearch:9200
+      ports:
+        - 5602:5601
+      labels:
+            - "logging=true"
+

@@ -1,0 +1,83 @@
+{ "data": [
+  {
+    "id": 1,
+    "type": "user-interfaces",
+    "attributes": {
+      "engine": false,
+      "label": "Flink",
+      "base-url": "http://localhost:9995",
+      "append-path": ""
+    }
+  },
+  {
+    "id": 2,
+    "type": "user-interfaces",
+    "attributes": {
+      "engine": false,
+      "label": "Node Manager",
+      "base-url": "http://localhost:9993",
+      "append-path": ""
+    }
+  },
+  {
+    "id": 3,
+    "type": "user-interfaces",
+    "attributes": {
+      "engine": false,
+      "label": "Hue",
+      "base-url": "http://localhost:9994",
+      "append-path": "/home"
+    }
+  },
+  {
+    "id": 4,
+    "type": "user-interfaces",
+    "attributes": {
+      "engine": false,
+      "label": "Virtuoso",
+      "base-url": "http://localhost:9980",
+      "append-path": "/sparql"
+    }
+  },
+  {
+    "id": 5,
+    "type": "user-interfaces",
+    "attributes": {
+      "engine": false,
+      "label": "Monitor",
+      "base-url": "http://localhost:9996",
+      "append-path": ""
+    }
+  },
+  {
+    "id": 6,
+    "type": "user-interfaces",
+    "attributes": {
+      "engine": false,
+      "label": "Resources",
+      "base-url": "http://localhost:9991",
+      "append-path": ""
+    }
+  },
+  {
+    "id": 7,
+    "type": "user-interfaces",
+    "attributes": {
+      "engine": false,
+      "label": "History",
+      "base-url": "http://localhost:9992",
+      "append-path": ""
+    }
+  },
+  {
+      "id": 8,
+      "type": "user-interfaces",
+      "attributes": {
+        "engine": false,
+        "label": "Kibana",
+        "base-url": "http://localhost:5602",
+        "append-path": ""
+      }
+    }
+]
+}
